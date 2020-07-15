@@ -3,8 +3,7 @@ import os
 from flask import Flask, render_template, request, flash, redirect, session, g
 from flask_debugtoolbar import DebugToolbarExtension
 from sqlalchemy.exc import IntegrityError
-
-from forms import UserAddForm, LoginForm, MessageForm
+from forms import UserAddForm, LoginForm, MessageForm, EditUserForm
 from models import db, connect_db, User, Message
 
 CURR_USER_KEY = "curr_user"
@@ -25,6 +24,12 @@ toolbar = DebugToolbarExtension(app)
 
 connect_db(app)
 
+
+# ============ PART ONE - STEP SIX ============ #
+# - The logged in user is being tracked by saving the username in the browser's session
+# - g is a global object. A simple namespace object that uses session or a db to store data for the liftime of the application
+# - stores the user info to the application context, in this case g-object
+# - @app.before_request runs the function before any requests are made.
 
 ##############################################################################
 # User signup/login/logout
@@ -214,25 +219,30 @@ def stop_following(follow_id):
 @app.route("/users/profile", methods=["GET", "POST"])
 def profile():
     """Update profile for current user."""
-    # user = User.query.get_or_404(user_id)
+
     # IMPLEMENT THIS
     if not g.user:
         flash("Access unauthorized", "danger")
         return redirect("/")
 
-    form = UserAddForm(obj=profile)
+    profile = User.query.get_or_404(g.user.id)
+    form = EditUserForm(obj=profile)
     if form.validate_on_submit():
-        profile.username = form.username.data
-        profile.email = form.email.data
-        profile.image_url = form.image_url.data
-        # profile.header_image_url = form.header_image_url.data
-        # profile.bio = form.bio.data
+        if User.authenticate(g.user.username, form.password.data):
+            profile.username = form.username.data
+            profile.email = form.email.data
+            profile.image_url = form.image_url.data
+            profile.header_image_url = form.header_image_url.data
+            profile.bio = form.bio.data
 
-        db.session.commit()
-        flash("Profile edited", "success")
-        return redirect(f"/users/{g.user.id}")
+            db.session.commit()
+            flash("Profile edited", "success")
+            return redirect(f"/users/{g.user.id}")
 
-    return render_template("/users/edit.html", form=form)
+        flash("You are unauthorized", "danger")
+        # return redirect("/")
+
+    return render_template("/users/edit.html", form=form, user_id=g.user.id)
 
 
 @app.route("/users/delete", methods=["POST"])
@@ -312,9 +322,15 @@ def homepage():
     - anon users: no messages
     - logged in: 100 most recent messages of followed_users
     """
-
     if g.user:
-        messages = Message.query.order_by(Message.timestamp.desc()).limit(100).all()
+        following_ids = [user.id for user in g.user.following] + [g.user.id]
+
+        messages = (
+            Message.query.filter(Message.user_id.in_(following_ids))
+            .order_by(Message.timestamp.desc())
+            .limit(100)
+            .all()
+        )
 
         return render_template("home.html", messages=messages)
 
