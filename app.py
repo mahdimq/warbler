@@ -311,6 +311,42 @@ def messages_destroy(message_id):
     return redirect(f"/users/{g.user.id}")
 
 
+# ====================== PART TWO ==================== #
+
+
+@app.route("/users/<int:user_id>/likes", methods=["GET"])
+def show_liked_msgs(user_id):
+    """Show likes messages"""
+    if not g.user:
+        flash("Access unauthorized.", "danger")
+        return redirect("/")
+
+    user = User.query.get_or_404(user_id)
+    return render_template("/users/likes.html", user=user, likes=user.likes)
+
+
+@app.route("/messages/<int:msg_id>/like", methods=["POST"])
+def like_message(msg_id):
+    """Show a likes message."""
+    if not g.user:
+        flash("Access unauthorized.", "danger")
+        return redirect("/")
+
+    like_msg = Message.query.get_or_404(msg_id)
+    if like_msg.user_id == g.user.id:
+        flash("you cannot like your own messages", "danger")
+        return redirect(f"/users/{g.user.id}")
+
+    if like_msg in g.user.likes:
+        g.user.likes = [like for like in g.user.likes if like != like_msg]
+    else:
+        g.user.likes.append(like_msg)
+
+    db.session.commit()
+    flash("message liked!", "success")
+    return redirect("/")
+
+
 ##############################################################################
 # Homepage and error pages
 

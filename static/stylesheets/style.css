@@ -196,6 +196,16 @@ nav + .container {
 	margin-left: 10px;
 }
 
+/* ==================== star likes ============== */
+
+.messages-like {
+	position: absolute;
+	top: 4px;
+	right: 4px;
+	z-index: 1;
+}
+/* ============================================= */
+
 #warbler-hero {
 	height: 360px;
 	margin-top: -16px;
