@@ -2,8 +2,8 @@
 
 {% block content %}
 
-<div id="warbler-hero" class="full-width">
-  <img src="{{ g.user.header_image_url }}" alt="" class="card-hero">
+<div id="profile-img" class="full-width">
+  <img src="{{ g.user.header_image_url }}" alt="" class="img">
 </div>
 <!-- Need to fix hero image -->
 
@@ -33,7 +33,7 @@
           </li>
           <li class="stat">
             <p class="small">Likes</p>
-            <h4>TBD</h4>
+            <h4><a href="/users/{{ user.id }}/likes">{{user.likes | length}}</a></h4>
           </li>
           <div class="ml-auto">
             {% if g.user.id == user.id %}

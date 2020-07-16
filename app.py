@@ -338,12 +338,13 @@ def like_message(msg_id):
         return redirect(f"/users/{g.user.id}")
 
     if like_msg in g.user.likes:
+        flash("message unliked!", "danger")
         g.user.likes = [like for like in g.user.likes if like != like_msg]
     else:
+        flash("message liked!", "success")
         g.user.likes.append(like_msg)
 
     db.session.commit()
-    flash("message liked!", "success")
     return redirect("/")
 
 
@@ -367,7 +368,6 @@ def homepage():
             .limit(100)
             .all()
         )
-
         return render_template("home.html", messages=messages)
 
     else:
