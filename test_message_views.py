@@ -48,26 +48,106 @@ class MessageViewTestCase(TestCase):
                                     email="test@test.com",
                                     password="testuser",
                                     image_url=None)
-
+        self.testuser.id = 1111
         db.session.commit()
 
-    def test_add_message(self):
-        """Can use add a message?"""
+        self.testuser_message = Message(text="User_test_message", user_id=self.testuser.id)
+        db.session.add(self.testuser_message)
+        db.session.commit()
+        self.MSG = "MSG" #<-- add msg to session
 
-        # Since we need to change the session to mimic logging in,
-        # we need to use the changing-session trick:
-
-        with self.client as c:
-            with c.session_transaction() as sess:
+    def test_authorized_addmessage(self):
+        """Can user add a message?"""
+        with self.client as client:
+            with client.session_transaction() as sess:
                 sess[CURR_USER_KEY] = self.testuser.id
 
             # Now, that session setting is saved, so we can have
             # the rest of ours test
 
-            resp = c.post("/messages/new", data={"text": "Hello"})
+            res = client.post("/messages/new", data={"text": "Hello"})
 
             # Make sure it redirects
-            self.assertEqual(resp.status_code, 302)
+            self.assertEqual(res.status_code, 302)
 
-            msg = Message.query.one()
+            msg = Message.query.filter(Message.text == 'Hello').first()
             self.assertEqual(msg.text, "Hello")
+
+
+    def test_authorized_showmessage(self):
+        """Show messages from authorized users"""
+        # Make Sample Mesage
+        msg = Message(
+            id=1234,
+            text="a test message",
+            user_id=self.testuser.id
+        )
+        # Add message to DB
+        db.session.add(msg)
+        db.session.commit()
+
+        with self.client as client:
+            with client.session_transaction() as sess:
+                sess[CURR_USER_KEY] = self.testuser.id
+
+            # Retreive msg from DB
+            msg = Message.query.get(1234)
+            res = client.get(f'/messages/{msg.id}')
+            # confirm status code and data
+            self.assertEqual(res.status_code, 200)
+            self.assertIn(msg.text, str(res.data))
+
+
+    def test_unauthorized_showmessage(self):
+        """Show messages from unauthorized user"""
+         # make a client and session block
+        with self.client as client:
+            with client.session_transaction() as sess:
+                sess[CURR_USER_KEY] = self.testuser.id
+                sess[self.MSG] =self.testuser_message.id
+
+            # Get messages from view route
+            res = client.get(f"/messages/{self.testuser_message.id}")
+            html = res.get_data(as_text=True)
+            # confirm stats code and data
+            self.assertEqual(res.status_code, 200)
+            self.assertIn(f'<p class="single-message">{self.testuser_message.text}</p>', html)
+
+
+    def test_authorized_messagedelete(self):
+        """Show deleted messages route from authorzied user"""
+        # Create fake unauthorized user
+        fakeUser = User.signup(username="unauthorized-user",
+                        email="testtest@test.com",
+                        password="password",
+                        image_url=None)
+        fakeUser.id = 4455
+
+        # authorized user message
+        msg = Message(
+            id=1234,
+            text="test users message",
+            user_id=self.testuser.id
+        )
+        # Add both messages to DB.
+        db.session.add_all([fakeUser, msg])
+        db.session.commit()
+
+        with self.client as client:
+            with client.session_transaction() as sess:
+                sess[CURR_USER_KEY] = fakeUser.id #<-- unauthorized user in session
+            # Unauthorized user trying to delete authorized user msg
+            res = client.post("/messages/1234/delete", follow_redirects=True)
+            self.assertEqual(res.status_code, 200)
+            self.assertIn("Access unauthorized", str(res.data))
+            # Check is message was deleted, and confirm msg contains data
+            msg = Message.query.get(1234)
+            self.assertIsNotNone(msg)
+
+    def test_unauthorized_messagedelete(self):
+        """Show unauthorized user delete msg"""
+        with self.client as client: #<-- Client not in session
+            # Sending post to delete and returns 'unauthorized msg'
+            res = client.post(f"/messages/1234/delete")
+            self.assertEqual(res.status_code, 404)
+            self.assertIn("Access unauthorized", str(res.data))

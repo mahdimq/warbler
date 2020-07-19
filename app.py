@@ -58,6 +58,12 @@ def do_logout():
     if CURR_USER_KEY in session:
         del session[CURR_USER_KEY]
 
+def do_authorize():
+    """Authorize user."""
+    if not g.user:
+        flash("Access unauthorized.", "danger")
+        return redirect("/")
+
 
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
@@ -70,6 +76,7 @@ def signup():
     If the there already is a user with that username: flash message
     and re-present form.
     """
+    do_logout()  #<-- confirm user is logged out
 
     form = UserAddForm()
 
@@ -119,7 +126,7 @@ def logout():
     """Handle logout of user."""
 
     # IMPLEMENT THIS
-    session.pop(CURR_USER_KEY)
+    do_logout()
     flash("You have been succesfully logged out", "danger")
     return redirect("/")
 
@@ -166,9 +173,7 @@ def users_show(user_id):
 def show_following(user_id):
     """Show list of people this user is following."""
 
-    if not g.user:
-        flash("Access unauthorized.", "danger")
-        return redirect("/")
+    do_authorize()
 
     user = User.query.get_or_404(user_id)
     return render_template("users/following.html", user=user)
@@ -178,9 +183,7 @@ def show_following(user_id):
 def users_followers(user_id):
     """Show list of followers of this user."""
 
-    if not g.user:
-        flash("Access unauthorized.", "danger")
-        return redirect("/")
+    do_authorize()
 
     user = User.query.get_or_404(user_id)
     return render_template("users/followers.html", user=user)
@@ -190,12 +193,11 @@ def users_followers(user_id):
 def add_follow(follow_id):
     """Add a follow for the currently-logged-in user."""
 
-    if not g.user:
-        flash("Access unauthorized.", "danger")
-        return redirect("/")
+    do_authorize()
 
     followed_user = User.query.get_or_404(follow_id)
     g.user.following.append(followed_user)
+    flash("User followed", "success")
     db.session.commit()
 
     return redirect(f"/users/{g.user.id}/following")
@@ -205,12 +207,11 @@ def add_follow(follow_id):
 def stop_following(follow_id):
     """Have currently-logged-in-user stop following this user."""
 
-    if not g.user:
-        flash("Access unauthorized.", "danger")
-        return redirect("/")
+    do_authorize()
 
     followed_user = User.query.get(follow_id)
     g.user.following.remove(followed_user)
+    flash("User unfollowed", "danger")
     db.session.commit()
 
     return redirect(f"/users/{g.user.id}/following")
@@ -221,9 +222,7 @@ def profile():
     """Update profile for current user."""
 
     # IMPLEMENT THIS
-    if not g.user:
-        flash("Access unauthorized", "danger")
-        return redirect("/")
+    do_authorize()
 
     profile = User.query.get_or_404(g.user.id)
     form = EditUserForm(obj=profile)
@@ -234,6 +233,7 @@ def profile():
             profile.image_url = form.image_url.data
             profile.header_image_url = form.header_image_url.data
             profile.bio = form.bio.data
+            profile.location = form.location.data
 
             db.session.commit()
             flash("Profile edited", "success")
@@ -249,10 +249,7 @@ def profile():
 def delete_user():
     """Delete user."""
 
-    if not g.user:
-        flash("Access unauthorized.", "danger")
-        return redirect("/")
-
+    do_authorize()
     do_logout()
 
     db.session.delete(g.user)
@@ -272,9 +269,7 @@ def messages_add():
     Show form if GET. If valid, update message and redirect to user page.
     """
 
-    if not g.user:
-        flash("Access unauthorized.", "danger")
-        return redirect("/")
+    do_authorize()
 
     form = MessageForm()
 
@@ -300,11 +295,14 @@ def messages_show(message_id):
 def messages_destroy(message_id):
     """Delete a message."""
 
-    if not g.user:
+    do_authorize()
+
+    msg = Message.query.get_or_404(message_id)
+
+    if msg.user_id != g.user.id:
         flash("Access unauthorized.", "danger")
         return redirect("/")
 
-    msg = Message.query.get(message_id)
     db.session.delete(msg)
     db.session.commit()
 
@@ -317,9 +315,7 @@ def messages_destroy(message_id):
 @app.route("/users/<int:user_id>/likes", methods=["GET"])
 def show_liked_msgs(user_id):
     """Show likes messages"""
-    if not g.user:
-        flash("Access unauthorized.", "danger")
-        return redirect("/")
+    do_authorize()
 
     user = User.query.get_or_404(user_id)
     return render_template("/users/likes.html", user=user, likes=user.likes)
@@ -328,9 +324,7 @@ def show_liked_msgs(user_id):
 @app.route("/messages/<int:msg_id>/like", methods=["POST"])
 def like_message(msg_id):
     """Show a likes message."""
-    if not g.user:
-        flash("Access unauthorized.", "danger")
-        return redirect("/")
+    do_authorize()
 
     like_msg = Message.query.get_or_404(msg_id)
     if like_msg.user_id == g.user.id:
@@ -368,10 +362,18 @@ def homepage():
             .limit(100)
             .all()
         )
-        return render_template("home.html", messages=messages)
+        likes_ids = [msg.id for msg in g.user.likes]
+        return render_template("home.html", messages=messages, likes=likes_ids)
 
     else:
         return render_template("home-anon.html")
+
+
+@app.errorhandler(404)
+def page_not_found(e):
+    """404 NOT FOUND page."""
+
+    return render_template('404.html'), 404
 
 
 ##############################################################################
